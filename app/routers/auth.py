@@ -37,7 +37,7 @@ def register(user_in: schemas.RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=schemas.LoginResponse, summary="Iniciar sesión")
 def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
-    """Inicia sesión validando credenciales y devuelve un token de acceso."""
+    """Inicia sesión validando credenciales y devuelve un token de acceso JWT firmado."""
     user = db.query(models.Usuario).filter(models.Usuario.correo == credentials.correo).first()
     if not user or not auth.verify_password(credentials.password, user.password):
         raise HTTPException(
@@ -45,10 +45,24 @@ def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
             detail="Correo o contraseña incorrectos."
         )
 
-    token = auth.generate_token()
+    # Generar Token JWT firmado con claims de usuario y rol
+    jwt_token = auth.create_access_token(
+        data={
+            "sub": user.correo,
+            "user_id": user.id,
+            "rol": user.rol.nombre if user.rol else "Integrante"
+        }
+    )
+    
     return schemas.LoginResponse(
         mensaje="Inicio de sesión exitoso",
-        token=token,
+        access_token=jwt_token,
+        token_type="bearer",
         usuario=user
     )
 
+
+@router.get("/me", response_model=schemas.UsuarioResponse, summary="Obtener perfil del usuario autenticado (Protegido con JWT)")
+def get_current_user_profile(current_user: models.Usuario = Depends(auth.get_current_user)):
+    """Devuelve la información del usuario autenticado a partir del token JWT Bearer."""
+    return current_user

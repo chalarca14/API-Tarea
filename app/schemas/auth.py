@@ -14,6 +14,11 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     mensaje: str
-    token: str
+    access_token: str
+    token_type: str = "bearer"
     usuario: UsuarioResponse
 
+    # Propiedad de compatibilidad
+    @property
+    def token(self) -> str:
+        return self.access_token
