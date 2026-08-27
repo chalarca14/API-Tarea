@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app import models, schemas, auth
@@ -36,16 +37,43 @@ def register(user_in: schemas.RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=schemas.LoginResponse, summary="Iniciar sesión")
-def login(credentials: schemas.LoginRequest, db: Session = Depends(get_db)):
-    """Inicia sesión validando credenciales y devuelve un token de acceso JWT firmado."""
-    user = db.query(models.Usuario).filter(models.Usuario.correo == credentials.correo).first()
-    if not user or not auth.verify_password(credentials.password, user.password):
+async def login(request: Request, db: Session = Depends(get_db)):
+    """
+    Inicia sesión validando credenciales y devuelve un token JWT firmado.
+    Soporta tanto JSON (`{"correo": "...", "password": "..."}`) como Form Data de OAuth2 (para el botón 'Authorize' de Swagger).
+    """
+    content_type = request.headers.get("content-type", "").lower()
+    correo = None
+    password = None
+
+    if "application/x-www-form-urlencoded" in content_type or "multipart/form-data" in content_type:
+        form = await request.form()
+        correo = form.get("username") or form.get("correo")
+        password = form.get("password")
+    else:
+        try:
+            body = await request.json()
+            correo = body.get("correo") or body.get("username")
+            password = body.get("password")
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Formato de solicitud no válido. Debe enviar JSON o Form Data."
+            )
+
+    if not correo or not password:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Debe proporcionar correo/username y password."
+        )
+
+    user = db.query(models.Usuario).filter(models.Usuario.correo == correo).first()
+    if not user or not auth.verify_password(password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Correo o contraseña incorrectos."
         )
 
-    # Generar Token JWT firmado con claims de usuario y rol
     jwt_token = auth.create_access_token(
         data={
             "sub": user.correo,
