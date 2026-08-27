@@ -1,0 +1,28 @@
+# Entorno virtual
+venv/
+env/
+ENV/
+.venv/
+
+# Bytecode de Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Variables de entorno
+.env
+
+# Base de datos SQLite local
+*.db
+*.sqlite3
+*.sqlite
+
+# IDE y editores
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs y temporales
+*.log
