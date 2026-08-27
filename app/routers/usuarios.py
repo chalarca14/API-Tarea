@@ -6,19 +6,30 @@ from app import models, schemas, auth
 
 router = APIRouter(prefix="/usuarios", tags=["Usuarios"])
 
-@router.get("", response_model=List[schemas.UsuarioResponse], summary="Listar todos los usuarios")
-def get_usuarios(db: Session = Depends(get_db)):
+@router.get("", response_model=List[schemas.UsuarioResponse], summary="Listar todos los usuarios (Protegido)")
+def get_usuarios(
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     return db.query(models.Usuario).options(joinedload(models.Usuario.rol)).all()
 
-@router.get("/{id}", response_model=schemas.UsuarioResponse, summary="Obtener un usuario por ID")
-def get_usuario(id: int, db: Session = Depends(get_db)):
+@router.get("/{id}", response_model=schemas.UsuarioResponse, summary="Obtener un usuario por ID (Protegido)")
+def get_usuario(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     usuario = db.query(models.Usuario).options(joinedload(models.Usuario.rol)).filter(models.Usuario.id == id).first()
     if not usuario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
     return usuario
 
-@router.post("", response_model=schemas.UsuarioResponse, status_code=status.HTTP_201_CREATED, summary="Crear un usuario")
-def create_usuario(user_in: schemas.UsuarioCreate, db: Session = Depends(get_db)):
+@router.post("", response_model=schemas.UsuarioResponse, status_code=status.HTTP_201_CREATED, summary="Crear un usuario (Solo Administrador)")
+def create_usuario(
+    user_in: schemas.UsuarioCreate,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
     existing = db.query(models.Usuario).filter(models.Usuario.correo == user_in.correo).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El correo ya está registrado")
@@ -39,8 +50,21 @@ def create_usuario(user_in: schemas.UsuarioCreate, db: Session = Depends(get_db)
     db.refresh(nuevo_usuario)
     return nuevo_usuario
 
-@router.put("/{id}", response_model=schemas.UsuarioResponse, summary="Actualizar un usuario")
-def update_usuario(id: int, user_in: schemas.UsuarioUpdate, db: Session = Depends(get_db)):
+@router.put("/{id}", response_model=schemas.UsuarioResponse, summary="Actualizar un usuario (Protegido)")
+def update_usuario(
+    id: int,
+    user_in: schemas.UsuarioUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
+    # Un usuario solo puede editar su propio perfil, a menos que sea Administrador
+    rol_actual = current_user.rol.nombre if current_user.rol else ""
+    if current_user.id != id and rol_actual != "Administrador":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permisos para modificar otros usuarios. Solo un Administrador puede hacerlo."
+        )
+
     usuario = db.query(models.Usuario).filter(models.Usuario.id == id).first()
     if not usuario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")
@@ -55,6 +79,11 @@ def update_usuario(id: int, user_in: schemas.UsuarioUpdate, db: Session = Depend
         update_data["password"] = auth.hash_password(update_data["password"])
 
     if "rol_id" in update_data and update_data["rol_id"]:
+        if rol_actual != "Administrador":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Solo los Administradores pueden cambiar el rol de un usuario."
+            )
         rol = db.query(models.Rol).filter(models.Rol.id == update_data["rol_id"]).first()
         if not rol:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El rol especificado no existe")
@@ -66,8 +95,18 @@ def update_usuario(id: int, user_in: schemas.UsuarioUpdate, db: Session = Depend
     db.refresh(usuario)
     return usuario
 
-@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar un usuario")
-def delete_usuario(id: int, db: Session = Depends(get_db)):
+@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar un usuario (Solo Administrador)")
+def delete_usuario(
+    id: int,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
+    if admin_user.id == id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Un administrador no puede eliminarse a sí mismo."
+        )
+
     usuario = db.query(models.Usuario).filter(models.Usuario.id == id).first()
     if not usuario:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado")

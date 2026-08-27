@@ -2,18 +2,19 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app import models, schemas
+from app import models, schemas, auth
 
 router = APIRouter(prefix="/tareas", tags=["Tareas"])
 
-@router.get("", response_model=List[schemas.TareaResponse], summary="Listar todas las tareas")
+@router.get("", response_model=List[schemas.TareaResponse], summary="Listar todas las tareas (Protegido)")
 def get_tareas(
     proyecto_id: Optional[int] = Query(None, description="Filtrar tareas por proyecto"),
     usuario_id: Optional[int] = Query(None, description="Filtrar tareas por usuario"),
     estado_id: Optional[int] = Query(None, description="Filtrar tareas por estado"),
     prioridad_id: Optional[int] = Query(None, description="Filtrar tareas por prioridad"),
     categoria_id: Optional[int] = Query(None, description="Filtrar tareas por categoría"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     query = db.query(models.Tarea)
     if proyecto_id:
@@ -28,15 +29,23 @@ def get_tareas(
         query = query.filter(models.Tarea.categoria_id == categoria_id)
     return query.all()
 
-@router.get("/{id}", response_model=schemas.TareaResponse, summary="Obtener una tarea por ID")
-def get_tarea(id: int, db: Session = Depends(get_db)):
+@router.get("/{id}", response_model=schemas.TareaResponse, summary="Obtener una tarea por ID (Protegido)")
+def get_tarea(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     tarea = db.query(models.Tarea).filter(models.Tarea.id == id).first()
     if not tarea:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarea no encontrada")
     return tarea
 
-@router.post("", response_model=schemas.TareaResponse, status_code=status.HTTP_201_CREATED, summary="Crear una nueva tarea")
-def create_tarea(tarea_in: schemas.TareaCreate, db: Session = Depends(get_db)):
+@router.post("", response_model=schemas.TareaResponse, status_code=status.HTTP_201_CREATED, summary="Crear una nueva tarea (Protegido)")
+def create_tarea(
+    tarea_in: schemas.TareaCreate,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     proyecto = db.query(models.Proyecto).filter(models.Proyecto.id == tarea_in.proyecto_id).first()
     if not proyecto:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El proyecto especificado no existe")
@@ -63,8 +72,13 @@ def create_tarea(tarea_in: schemas.TareaCreate, db: Session = Depends(get_db)):
     db.refresh(nueva_tarea)
     return nueva_tarea
 
-@router.put("/{id}", response_model=schemas.TareaResponse, summary="Actualizar una tarea")
-def update_tarea(id: int, tarea_in: schemas.TareaUpdate, db: Session = Depends(get_db)):
+@router.put("/{id}", response_model=schemas.TareaResponse, summary="Actualizar una tarea (Protegido)")
+def update_tarea(
+    id: int,
+    tarea_in: schemas.TareaUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     tarea = db.query(models.Tarea).filter(models.Tarea.id == id).first()
     if not tarea:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarea no encontrada")
@@ -98,8 +112,12 @@ def update_tarea(id: int, tarea_in: schemas.TareaUpdate, db: Session = Depends(g
     db.refresh(tarea)
     return tarea
 
-@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar una tarea")
-def delete_tarea(id: int, db: Session = Depends(get_db)):
+@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar una tarea (Solo Administrador o Líder)")
+def delete_tarea(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.require_lider_o_admin)
+):
     tarea = db.query(models.Tarea).filter(models.Tarea.id == id).first()
     if not tarea:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarea no encontrada")
@@ -107,4 +125,3 @@ def delete_tarea(id: int, db: Session = Depends(get_db)):
     db.delete(tarea)
     db.commit()
     return {"mensaje": f"Tarea con ID {id} eliminada correctamente"}
-

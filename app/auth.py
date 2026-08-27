@@ -14,7 +14,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "taskflow_super_secret_key_sena_2026_jwt_to
 ALGORITHM = os.getenv("ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 
 def hash_password(password: str) -> str:
@@ -58,14 +58,14 @@ def decode_access_token(token: str) -> dict:
 
 
 def get_current_user(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ) -> models.Usuario:
     """Dependencia para obtener el usuario autenticado a partir del Bearer Token JWT."""
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No se proporcionaron credenciales de autenticación.",
+            detail="No autenticado. Por favor inicie sesión.",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -74,7 +74,7 @@ def get_current_user(
     if correo is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token no contiene información de usuario.",
+            detail="Token inválido sin información de usuario.",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
@@ -85,7 +85,7 @@ def get_current_user(
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Usuario autenticado no encontrado en la base de datos.",
+            detail="Usuario autenticado no encontrado.",
         )
     return user
 
@@ -97,7 +97,11 @@ def require_roles(allowed_roles: List[str]):
         if rol_nombre not in allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permiso denegado. Rol requerido: {', '.join(allowed_roles)}. Rol actual: {rol_nombre}"
+                detail=f"Acceso denegado. Se requiere rol: {', '.join(allowed_roles)}. Tu rol actual es: {rol_nombre}"
             )
         return current_user
     return role_checker
+
+# Dependencias específicas de roles
+require_admin = require_roles(["Administrador"])
+require_lider_o_admin = require_roles(["Administrador", "Líder de Proyecto"])

@@ -2,23 +2,34 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app import models, schemas
+from app import models, schemas, auth
 
 router = APIRouter(prefix="/prioridades", tags=["Prioridades"])
 
-@router.get("", response_model=List[schemas.PrioridadResponse], summary="Listar las prioridades")
-def get_prioridades(db: Session = Depends(get_db)):
+@router.get("", response_model=List[schemas.PrioridadResponse], summary="Listar las prioridades (Protegido)")
+def get_prioridades(
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     return db.query(models.Prioridad).all()
 
-@router.get("/{id}", response_model=schemas.PrioridadResponse, summary="Obtener una prioridad por ID")
-def get_prioridad(id: int, db: Session = Depends(get_db)):
+@router.get("/{id}", response_model=schemas.PrioridadResponse, summary="Obtener una prioridad por ID (Protegido)")
+def get_prioridad(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     prioridad = db.query(models.Prioridad).filter(models.Prioridad.id == id).first()
     if not prioridad:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prioridad no encontrada")
     return prioridad
 
-@router.post("", response_model=schemas.PrioridadResponse, status_code=status.HTTP_201_CREATED, summary="Crear una prioridad")
-def create_prioridad(prio_in: schemas.PrioridadCreate, db: Session = Depends(get_db)):
+@router.post("", response_model=schemas.PrioridadResponse, status_code=status.HTTP_201_CREATED, summary="Crear una prioridad (Solo Administrador)")
+def create_prioridad(
+    prio_in: schemas.PrioridadCreate,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
     existing = db.query(models.Prioridad).filter(models.Prioridad.nombre == prio_in.nombre).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La prioridad ya existe")
@@ -28,8 +39,13 @@ def create_prioridad(prio_in: schemas.PrioridadCreate, db: Session = Depends(get
     db.refresh(nueva_prio)
     return nueva_prio
 
-@router.put("/{id}", response_model=schemas.PrioridadResponse, summary="Actualizar una prioridad")
-def update_prioridad(id: int, prio_in: schemas.PrioridadUpdate, db: Session = Depends(get_db)):
+@router.put("/{id}", response_model=schemas.PrioridadResponse, summary="Actualizar una prioridad (Solo Administrador)")
+def update_prioridad(
+    id: int,
+    prio_in: schemas.PrioridadUpdate,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
     prioridad = db.query(models.Prioridad).filter(models.Prioridad.id == id).first()
     if not prioridad:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prioridad no encontrada")
@@ -42,8 +58,12 @@ def update_prioridad(id: int, prio_in: schemas.PrioridadUpdate, db: Session = De
     db.refresh(prioridad)
     return prioridad
 
-@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar una prioridad")
-def delete_prioridad(id: int, db: Session = Depends(get_db)):
+@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar una prioridad (Solo Administrador)")
+def delete_prioridad(
+    id: int,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
     prioridad = db.query(models.Prioridad).filter(models.Prioridad.id == id).first()
     if not prioridad:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prioridad no encontrada")
@@ -51,4 +71,3 @@ def delete_prioridad(id: int, db: Session = Depends(get_db)):
     db.delete(prioridad)
     db.commit()
     return {"mensaje": f"Prioridad con ID {id} eliminada correctamente"}
-

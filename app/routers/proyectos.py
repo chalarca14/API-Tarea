@@ -2,31 +2,47 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app import models, schemas
+from app import models, schemas, auth
 
 router = APIRouter(prefix="/proyectos", tags=["Proyectos"])
 
-@router.get("", response_model=List[schemas.ProyectoResponse], summary="Listar todos los proyectos")
-def get_proyectos(db: Session = Depends(get_db)):
+@router.get("", response_model=List[schemas.ProyectoResponse], summary="Listar todos los proyectos (Protegido)")
+def get_proyectos(
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     return db.query(models.Proyecto).all()
 
-@router.get("/{id}", response_model=schemas.ProyectoResponse, summary="Obtener un proyecto por ID")
-def get_proyecto(id: int, db: Session = Depends(get_db)):
+@router.get("/{id}", response_model=schemas.ProyectoResponse, summary="Obtener un proyecto por ID (Protegido)")
+def get_proyecto(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     proyecto = db.query(models.Proyecto).filter(models.Proyecto.id == id).first()
     if not proyecto:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
     return proyecto
 
-@router.post("", response_model=schemas.ProyectoResponse, status_code=status.HTTP_201_CREATED, summary="Crear un nuevo proyecto")
-def create_proyecto(proy_in: schemas.ProyectoCreate, db: Session = Depends(get_db)):
+@router.post("", response_model=schemas.ProyectoResponse, status_code=status.HTTP_201_CREATED, summary="Crear un nuevo proyecto (Protegido)")
+def create_proyecto(
+    proy_in: schemas.ProyectoCreate,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     nuevo_proyecto = models.Proyecto(**proy_in.model_dump())
     db.add(nuevo_proyecto)
     db.commit()
     db.refresh(nuevo_proyecto)
     return nuevo_proyecto
 
-@router.put("/{id}", response_model=schemas.ProyectoResponse, summary="Actualizar un proyecto")
-def update_proyecto(id: int, proy_in: schemas.ProyectoUpdate, db: Session = Depends(get_db)):
+@router.put("/{id}", response_model=schemas.ProyectoResponse, summary="Actualizar un proyecto (Protegido)")
+def update_proyecto(
+    id: int,
+    proy_in: schemas.ProyectoUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     proyecto = db.query(models.Proyecto).filter(models.Proyecto.id == id).first()
     if not proyecto:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
@@ -39,8 +55,12 @@ def update_proyecto(id: int, proy_in: schemas.ProyectoUpdate, db: Session = Depe
     db.refresh(proyecto)
     return proyecto
 
-@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar un proyecto")
-def delete_proyecto(id: int, db: Session = Depends(get_db)):
+@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar un proyecto (Solo Administrador)")
+def delete_proyecto(
+    id: int,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
     proyecto = db.query(models.Proyecto).filter(models.Proyecto.id == id).first()
     if not proyecto:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
@@ -48,4 +68,3 @@ def delete_proyecto(id: int, db: Session = Depends(get_db)):
     db.delete(proyecto)
     db.commit()
     return {"mensaje": f"Proyecto con ID {id} eliminado correctamente"}
-

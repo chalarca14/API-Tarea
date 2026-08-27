@@ -2,23 +2,34 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app import models, schemas
+from app import models, schemas, auth
 
 router = APIRouter(prefix="/estados", tags=["Estados"])
 
-@router.get("", response_model=List[schemas.EstadoResponse], summary="Listar los estados de las tareas")
-def get_estados(db: Session = Depends(get_db)):
+@router.get("", response_model=List[schemas.EstadoResponse], summary="Listar los estados de las tareas (Protegido)")
+def get_estados(
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     return db.query(models.Estado).all()
 
-@router.get("/{id}", response_model=schemas.EstadoResponse, summary="Obtener un estado por ID")
-def get_estado(id: int, db: Session = Depends(get_db)):
+@router.get("/{id}", response_model=schemas.EstadoResponse, summary="Obtener un estado por ID (Protegido)")
+def get_estado(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
     estado = db.query(models.Estado).filter(models.Estado.id == id).first()
     if not estado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estado no encontrado")
     return estado
 
-@router.post("", response_model=schemas.EstadoResponse, status_code=status.HTTP_201_CREATED, summary="Crear un estado")
-def create_estado(estado_in: schemas.EstadoCreate, db: Session = Depends(get_db)):
+@router.post("", response_model=schemas.EstadoResponse, status_code=status.HTTP_201_CREATED, summary="Crear un estado (Solo Administrador)")
+def create_estado(
+    estado_in: schemas.EstadoCreate,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
     existing = db.query(models.Estado).filter(models.Estado.nombre == estado_in.nombre).first()
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El estado ya existe")
@@ -28,8 +39,13 @@ def create_estado(estado_in: schemas.EstadoCreate, db: Session = Depends(get_db)
     db.refresh(nuevo_estado)
     return nuevo_estado
 
-@router.put("/{id}", response_model=schemas.EstadoResponse, summary="Actualizar un estado")
-def update_estado(id: int, estado_in: schemas.EstadoUpdate, db: Session = Depends(get_db)):
+@router.put("/{id}", response_model=schemas.EstadoResponse, summary="Actualizar un estado (Solo Administrador)")
+def update_estado(
+    id: int,
+    estado_in: schemas.EstadoUpdate,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
     estado = db.query(models.Estado).filter(models.Estado.id == id).first()
     if not estado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estado no encontrado")
@@ -42,8 +58,12 @@ def update_estado(id: int, estado_in: schemas.EstadoUpdate, db: Session = Depend
     db.refresh(estado)
     return estado
 
-@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar un estado")
-def delete_estado(id: int, db: Session = Depends(get_db)):
+@router.delete("/{id}", status_code=status.HTTP_200_OK, summary="Eliminar un estado (Solo Administrador)")
+def delete_estado(
+    id: int,
+    db: Session = Depends(get_db),
+    admin_user: models.Usuario = Depends(auth.require_admin)
+):
     estado = db.query(models.Estado).filter(models.Estado.id == id).first()
     if not estado:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Estado no encontrado")
@@ -51,4 +71,3 @@ def delete_estado(id: int, db: Session = Depends(get_db)):
     db.delete(estado)
     db.commit()
     return {"mensaje": f"Estado con ID {id} eliminado correctamente"}
-
