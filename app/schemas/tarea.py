@@ -1,5 +1,5 @@
-from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from typing import Optional, Any
+from pydantic import BaseModel, ConfigDict, field_validator
 
 class TareaBase(BaseModel):
     titulo: str
@@ -22,7 +22,59 @@ class TareaUpdate(BaseModel):
     estado_id: Optional[int] = None
     prioridad_id: Optional[int] = None
 
-class TareaResponse(TareaBase):
+class TareaResponse(BaseModel):
     id: int
+    titulo: str
+    descripcion: Optional[str] = None
+    proyecto: Optional[str] = None
+    usuario: Optional[str] = None
+    categoria: Optional[str] = None
+    estado: Optional[str] = None
+    prioridad: Optional[str] = None
+
     model_config = ConfigDict(from_attributes=True)
 
+    @field_validator("proyecto", mode="before")
+    @classmethod
+    def extract_proyecto(cls, v: Any) -> Optional[str]:
+        if hasattr(v, "nombre"):
+            return v.nombre
+        elif isinstance(v, dict) and "nombre" in v:
+            return v["nombre"]
+        return str(v) if v is not None else None
+
+    @field_validator("usuario", mode="before")
+    @classmethod
+    def extract_usuario(cls, v: Any) -> Optional[str]:
+        if hasattr(v, "nombre"):
+            return v.nombre
+        elif isinstance(v, dict) and "nombre" in v:
+            return v["nombre"]
+        return str(v) if v is not None else None
+
+    @field_validator("categoria", mode="before")
+    @classmethod
+    def extract_categoria(cls, v: Any) -> Optional[str]:
+        if hasattr(v, "nombre"):
+            return v.nombre
+        elif isinstance(v, dict) and "nombre" in v:
+            return v["nombre"]
+        return str(v) if v is not None else None
+
+    @field_validator("estado", mode="before")
+    @classmethod
+    def extract_estado(cls, v: Any) -> Optional[str]:
+        if hasattr(v, "nombre"):
+            return v.nombre
+        elif isinstance(v, dict) and "nombre" in v:
+            return v["nombre"]
+        return str(v) if v is not None else None
+
+    @field_validator("prioridad", mode="before")
+    @classmethod
+    def extract_prioridad(cls, v: Any) -> Optional[str]:
+        if hasattr(v, "nombre"):
+            return v.nombre
+        elif isinstance(v, dict) and "nombre" in v:
+            return v["nombre"]
+        return str(v) if v is not None else None

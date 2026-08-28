@@ -3,7 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import joinedload
-from app.database import engine, Base, SessionLocal, crear_tablas, sembrar_datos
+from app.database import engine, Base, SessionLocal
+from app.seed import seed_database
 from app import models
 from app.routers import (
     auth,
@@ -19,9 +20,16 @@ from app.routers import (
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Crear tablas en SQLite y sembrar datos iniciales
-    crear_tablas()
-    sembrar_datos()
+    # Crear tablas en SQLite si no existen
+    Base.metadata.create_all(bind=engine)
+    
+    # Poblar base de datos con datos iniciales si está vacía
+    db = SessionLocal()
+    try:
+        seed_database(db)
+    finally:
+        db.close()
+    
     yield
 
 app = FastAPI(
